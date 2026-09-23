@@ -14,17 +14,18 @@ Plugin id: `shaun.plugin-updater`
   not be reached, then up-to-date ones, then plugins that are not git checkouts.
 - Each row with an update gets an **Update** button. Pressing it opens a terminal with
   `omarchy plugin update <plugin-id> --yes` already typed at the prompt. Nothing runs
-  until you press Enter, so you can read the command, edit it, or answer a sudo prompt
-  in a real terminal, and the window stays open afterwards so any error text is readable.
+  until you press Enter, so you can read the command, edit it, or answer a password
+  prompt in a real terminal, and the window stays open afterwards so any error text is readable.
 - **Update all** queues every pending update, one terminal window each.
 - **Check** (or the `r` key) re-checks immediately. Results are otherwise cached, so the
   badge appears instantly after a shell restart instead of waiting on network fetches.
 
 Updates are applied with Omarchy's own `omarchy plugin update` CLI, so its validation
 step and rollback of a bad revision are preserved. That command is `git fetch` plus a
-fast-forward merge inside your home directory — **it does not need and does not use
-sudo**. If a sudo prompt ever appears, something else is involved; read the command in
-the terminal before pressing Enter.
+fast-forward merge inside your home directory — **it runs as your normal user and never
+asks for root access**. This widget never escalates privileges; if a system password
+prompt ever appears, something else is involved, so read the command in the terminal
+before pressing Enter.
 
 Plugins whose folder has been renamed to `<id>.disabled` are refused by the Omarchy CLI
 (as are hand-cloned directories that are not valid plugin ids), so those rows type a
