@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Opens a terminal with COMMAND pre-typed at the prompt. Nothing runs until the
-# user presses Enter, so they can read it, edit it, and answer any sudo prompt
-# in a real terminal. Mirrors omarchy-launch-floating-terminal-with-presentation
+# user presses Enter, so they can read it, edit it, and answer any prompt in a
+# real terminal. Mirrors omarchy-launch-floating-terminal-with-presentation
 # (setsid + uwsm-app + xdg-terminal-exec) so the window behaves like every other
 # Omarchy terminal launch, and falls back to a bare terminal emulator if that
 # launcher is missing.

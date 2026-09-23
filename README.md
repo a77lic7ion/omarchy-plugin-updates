@@ -22,10 +22,9 @@ Plugin id: `shaun.plugin-updater`
 
 Updates are applied with Omarchy's own `omarchy plugin update` CLI, so its validation
 step and rollback of a bad revision are preserved. That command is `git fetch` plus a
-fast-forward merge inside your home directory — **it runs as your normal user and never
-asks for root access**. This widget never escalates privileges; if a system password
-prompt ever appears, something else is involved, so read the command in the terminal
-before pressing Enter.
+fast-forward merge inside your own home directory: it runs as your normal user with no
+elevated access. If a system password prompt ever appears, something else is involved,
+so read the command in the terminal before pressing Enter.
 
 Plugins whose folder has been renamed to `<id>.disabled` are refused by the Omarchy CLI
 (as are hand-cloned directories that are not valid plugin ids), so those rows type a
