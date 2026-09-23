@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "shaun.plugin-updater",
+  "name": "Plugin Updates",
+  "version": "1.0.0",
+  "author": "Shaun Gordon",
+  "license": "MIT",
+  "description": "Check every installed Omarchy shell plugin for upstream updates and update them one at a time from the bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Plugin Updates",
+    "description": "Check installed Omarchy plugins for upstream updates",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
