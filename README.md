@@ -17,9 +17,10 @@ Plugin id: `shaun.plugin-updater`
   does not list or has not reviewed yet, then everything up to date.
 - Each row with an update gets an **Update** button and shows the reviewed commit it would
   install. Pressing it opens a terminal with a command already typed that fetches that
-  exact commit, checks it out, proves `HEAD` is that commit, runs Omarchy's own
-  `omarchy plugin validate`, and only then reloads the shell. Nothing runs until you press
-  Enter, so you can read it first, and the window stays open so any error text is readable.
+  exact commit, checks it out, proves `HEAD` is that commit **and that the plugin folder
+  itself is clean**, runs Omarchy's own `omarchy plugin validate`, and only then reloads the
+  shell. Nothing runs until you press Enter, so you can read it first, and the window stays
+  open so any error text is readable.
 - **Update all** does the same for every pending row, one terminal each, so a failure in
   one plugin cannot abort the others.
 - **Check** (or the `r` key) re-checks immediately. Results are otherwise cached, so the
@@ -42,8 +43,14 @@ What that means in practice:
 - If you already have commits the reviewed revision does not contain, the row says
   "ahead of reviewed revision …" and no update is offered — the widget never moves a
   plugin backwards.
-- A dirty working tree stops the checkout before anything changes: git refuses rather than
-  discarding your local edits.
+- A folder with local changes — edited files **or untracked ones** — is refused outright, at
+  both ends. The check offers no **Update** button for it, and the terminal chain stops
+  before validation and before the shell reload if the tree is dirty when it runs. That is
+  deliberate: a checkout does not overwrite modified files it does not touch, and never
+  removes untracked ones, so they would stay in the folder and still be loaded at the next
+  rescan — proving `HEAD` matches is not enough, the folder itself has to be clean. Nothing
+  is overwritten or deleted: your changes stay exactly where they are, and you decide
+  whether to commit, stash or keep them.
 - No password prompt is ever expected or used. Everything here runs as your normal user.
 
 ## Requirements
@@ -125,8 +132,11 @@ If you placed it by hand instead, delete
   read-only on your files; it only adds fetched objects to each plugin's own git database.
 - Never modifies a plugin directory itself. The one thing that changes a checkout is the
   command you confirm in the terminal, and that command only ever checks out the reviewed
-  commit and refuses if the verification or Omarchy's validation fails.
-- Skips its own directory while scanning, so it cannot try to update itself mid-operation.
+  commit — refusing if the revision verification, the clean-worktree check or Omarchy's
+  validation fails, and leaving the plugin exactly as it was found. It never deletes or
+  overwrites local changes.
+- Checks its own directory like any other plugin. Until this plugin is itself listed in the
+  catalogue it is reported as not listed, with no update offered.
 - Removal leaves nothing behind except the three cache files above.
 
 ## License

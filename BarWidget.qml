@@ -117,13 +117,17 @@ BarWidget {
   // plugin (row.sha, the catalogue's verificationCommit for that id) — never a
   // branch head, so nothing unreviewed is ever installed. The terminal types a
   // chain that fetches that exact commit, checks it out, proves HEAD is that
-  // commit, runs Omarchy's own validation, and only then reloads the shell; any
-  // failed step stops the chain before the shell reload.
+  // commit AND that the worktree itself is clean, runs Omarchy's own validation,
+  // and only then reloads the shell; any failed step stops the chain before the
+  // shell reload. A folder with local changes is refused outright: a checkout
+  // would leave those files in place, and they would still be loaded.
   function updateCommand(row) {
     if (!safeId(row.dir))
       return "echo 'Refusing to update: unsafe plugin directory name'"
     if (!safeSha(row.sha))
       return "echo 'Refusing to update: no marketplace-reviewed revision for this plugin'"
+    if (row.dirty === true)
+      return "echo 'Refusing to update: this plugin folder has local changes - commit or stash them first. Nothing was changed.'"
     var dir = "\"$HOME/.config/omarchy/plugins/" + row.dir + "\""
     var sha = row.sha
     var short = String(row.short || "").length > 0 ? row.short : sha.substring(0, 7)
@@ -132,6 +136,12 @@ BarWidget {
       + " && git -C " + dir + " checkout --detach " + sha
       + " && git -C " + dir + " rev-parse HEAD | grep -qx " + sha
       + " && echo 'verified: HEAD is " + short + "'"
+      // HEAD matching is not enough. A checkout leaves modified files it does not
+      // overwrite, and untracked QML/JS files, sitting in the plugin folder — and
+      // rescanPlugins loads them. Prove the worktree itself is clean before
+      // validating or reloading; if it is not, stop here and change nothing.
+      + " && ( [ -z \"$(git -C " + dir + " status --porcelain)\" ] && echo 'verified: worktree is clean'"
+      + " || { echo 'REFUSED: this plugin folder has local changes - nothing was reloaded. Commit or stash them and try again.'; false; } )"
       + " && omarchy plugin validate " + dir
       + " && omarchy-shell shell rescanPlugins"
       + " && echo 'done - press Check in the panel to re-check'"
@@ -140,7 +150,7 @@ BarWidget {
   function updateRows() {
     var targets = []
     for (var i = 0; i < rows.length; i++)
-      if (rows[i].state === "update" && safeSha(rows[i].sha)) targets.push(rows[i])
+      if (rows[i].state === "update" && safeSha(rows[i].sha) && rows[i].dirty !== true) targets.push(rows[i])
     return targets
   }
 

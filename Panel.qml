@@ -26,7 +26,7 @@ Panel {
   readonly property int problemCount: {
     var n = 0
     for (var i = 0; i < rows.length; i++)
-      if (rows[i].state === "error") n++
+      if (rows[i].state === "error" || rows[i].state === "dirty") n++
     return n
   }
 
@@ -42,9 +42,10 @@ Panel {
     if (root.checking) return "Checking every installed plugin…"
     if (root.checkError !== "") return root.checkError
     if (rows.length === 0) return "Nothing to check yet"
+    if (root.updateCount === 0 && root.problemCount > 0) return root.problemCount + " need attention"
     if (root.updateCount === 0) return "All " + rows.length + " plugins are up to date"
     return root.updateCount + " update" + (root.updateCount === 1 ? "" : "s")
-      + " available" + (root.problemCount > 0 ? " · " + root.problemCount + " not checkable" : "")
+      + " available" + (root.problemCount > 0 ? " · " + root.problemCount + " need attention" : "")
   }
 
   function open() {
@@ -212,8 +213,10 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !rowAction.visible
                 text: rowItem.modelData.state === "current" ? "\uf00c"
-                  : (rowItem.modelData.state === "error" ? "\uf071" : "\uf1b2")
-                color: rowItem.modelData.state === "error" ? root.urgent : root.dimmer
+                  : (rowItem.modelData.state === "error" || rowItem.modelData.state === "dirty"
+                     ? "\uf071" : "\uf1b2")
+                color: (rowItem.modelData.state === "error" || rowItem.modelData.state === "dirty")
+                  ? root.urgent : root.dimmer
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }
@@ -252,7 +255,8 @@ Panel {
                 Text {
                   width: parent.width
                   text: rowItem.modelData.detail
-                  color: rowItem.modelData.state === "error" ? root.urgent : root.dim
+                  color: (rowItem.modelData.state === "error" || rowItem.modelData.state === "dirty")
+                    ? root.urgent : root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
                   elide: Text.ElideRight
@@ -284,7 +288,8 @@ Panel {
             width: parent.width
             text: "Update buttons install the revision the marketplace has reviewed "
               + "for that plugin — the commit shown on the row — and the terminal "
-              + "verifies HEAD needs to match it before reloading the shell. "
+              + "verifies both HEAD and the folder itself match it before reloading the shell. "
+              + "A plugin folder with local changes is refused: nothing is overwritten or deleted. "
               + "Plugins with no reviewed revision are left alone. Nothing runs "
               + "until you press Enter, and the window stays open so you can read the result."
             color: root.dimmer

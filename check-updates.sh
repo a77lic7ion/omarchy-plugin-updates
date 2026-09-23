@@ -9,7 +9,13 @@
 #    "short":"fd3c85c","behind":2,"disabled":false,"dirty":false,
 #    "coverage":"snapshot-verified"}
 #
-# state: update | error | unreviewed | unlisted | current | local
+# state: update | dirty | error | unreviewed | unlisted | current | local
+#
+# `dirty` is an update this script refuses to offer: the folder has local
+# changes (edited files or untracked ones), so checking out the reviewed commit
+# would leave code in that folder the marketplace never saw — a checkout does not
+# overwrite modified files it does not touch, and never removes untracked ones.
+# Nothing is deleted; the user keeps their changes and decides what to do.
 #
 # Where the reviewed revision comes from: the marketplace catalogue publishes a
 # `verificationCommit` per listed plugin — the exact commit it has reviewed. This
@@ -197,9 +203,16 @@ check_one() {
 
   if git -C "$dir" merge-base --is-ancestor "$head" "$SHA" 2>/dev/null; then
     behind="$(git -C "$dir" rev-list --count "$head..$SHA" 2>/dev/null)"
-    local detail="${behind:-?} commit$([ "${behind:-0}" = "1" ] || echo s) behind · reviewed $SHORT"
-    [ "$dirty" = true ] && detail="$detail · uncommitted changes"
-    emit update "$detail" "${behind:-0}" "$dirty"
+    # Refused, not offered, when the worktree is dirty. `git status --porcelain`
+    # already reports tracked edits AND untracked files, and neither is removed by
+    # a checkout: they stay in the folder, get loaded on rescan, and the worktree
+    # would not equal the reviewed commit even though HEAD does. An update row here
+    # would be an update we cannot stand behind, so there is no update row.
+    if [ "$dirty" = true ]; then
+      emit dirty "${behind:-?} commit$([ "${behind:-0}" = "1" ] || echo s) behind · reviewed $SHORT · update refused, this folder has local changes" "${behind:-0}" true
+      return
+    fi
+    emit update "${behind:-?} commit$([ "${behind:-0}" = "1" ] || echo s) behind · reviewed $SHORT" "${behind:-0}" false
     return
   fi
 
@@ -230,10 +243,11 @@ wait
 jq -s -c '
   sort_by([(if .state == "update" then 0
             elif .state == "error" then 1
-            elif .state == "unreviewed" then 2
-            elif .state == "unlisted" then 3
-            elif .state == "current" then 4
-            else 5 end), .id])[]
+            elif .state == "dirty" then 2
+            elif .state == "unreviewed" then 3
+            elif .state == "unlisted" then 4
+            elif .state == "current" then 5
+            else 6 end), .id])[]
 ' "$tmp"/*.json 2>/dev/null
 
 # Also drop a cache file (one JSON object per line, same shape as stdout) so the
