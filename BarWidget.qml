@@ -98,27 +98,50 @@ BarWidget {
 
   // -- updating ------------------------------------------------------------
 
-  // Valid plugin ids only reach a shell buffer (defence against a hand-edited
-  // cache file smuggling anything else into the command that gets typed).
+  // Rows come from a cache file on disk, so both the directory name and the
+  // commit are treated as untrusted input: only a plugin-id-shaped name and a
+  // real 40-character lowercase hex commit ever reach a shell buffer.
   function safeId(value) {
     return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(value || ""))
   }
 
+  function safeSha(value) {
+    return /^[0-9a-f]{40}$/.test(String(value || ""))
+  }
+
+  function pluginDir(row) {
+    return "$HOME/.config/omarchy/plugins/" + row.dir
+  }
+
+  // Every update resolves to the revision the marketplace has reviewed for this
+  // plugin (row.sha, the catalogue's verificationCommit for that id) — never a
+  // branch head, so nothing unreviewed is ever installed. The terminal types a
+  // chain that fetches that exact commit, checks it out, proves HEAD is that
+  // commit, runs Omarchy's own validation, and only then reloads the shell; any
+  // failed step stops the chain before the shell reload.
   function updateCommand(row) {
-    // Refuse anything whose directory name isn't a plain plugin id, so a
-    // hand-created folder name can't smuggle shell syntax into the command that
-    // gets typed into the terminal.
-    if (!safeId(row.dir)) return "echo 'Refusing to update: unsafe plugin directory name'"
-    if (row.disabled) {
-      // omarchy plugin update refuses ids whose directory is renamed, so a
-      // disabled plugin is fast-forwarded directly instead.
-      return "git -C \"$HOME/.config/omarchy/plugins/" + row.dir
-        + "\" pull --ff-only && omarchy-shell shell rescanPlugins"
-    }
-    // --yes: skip the interactive diff + gum confirm. Without it the terminal
-    // stops on "Changes for <id>:" and waits for a gum prompt, which reads like
-    // a hang.
-    return "omarchy plugin update " + row.id + " --yes"
+    if (!safeId(row.dir))
+      return "echo 'Refusing to update: unsafe plugin directory name'"
+    if (!safeSha(row.sha))
+      return "echo 'Refusing to update: no marketplace-reviewed revision for this plugin'"
+    var dir = "\"$HOME/.config/omarchy/plugins/" + row.dir + "\""
+    var sha = row.sha
+    var short = String(row.short || "").length > 0 ? row.short : sha.substring(0, 7)
+    return "echo 'Installing " + row.id + " at the marketplace-reviewed revision " + short + "...'"
+      + " && git -C " + dir + " fetch --quiet origin " + sha
+      + " && git -C " + dir + " checkout --detach " + sha
+      + " && git -C " + dir + " rev-parse HEAD | grep -qx " + sha
+      + " && echo 'verified: HEAD is " + short + "'"
+      + " && omarchy plugin validate " + dir
+      + " && omarchy-shell shell rescanPlugins"
+      + " && echo 'done - press Check in the panel to re-check'"
+  }
+
+  function updateRows() {
+    var targets = []
+    for (var i = 0; i < rows.length; i++)
+      if (rows[i].state === "update" && safeSha(rows[i].sha)) targets.push(rows[i])
+    return targets
   }
 
   function updateOne(row) {
@@ -129,8 +152,10 @@ BarWidget {
     Quickshell.execDetached([root.runScript, command])
   }
 
+  // One terminal per plugin, so a failure in one cannot abort the others.
   function updateAll() {
-    Quickshell.execDetached([root.runScript, "omarchy plugin update --yes"])
+    var targets = root.updateRows()
+    for (var i = 0; i < targets.length; i++) root.updateOne(targets[i])
   }
 
   Process {

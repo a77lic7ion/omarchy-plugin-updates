@@ -1,44 +1,58 @@
 # Plugin Updates
 
 A bar widget for the [Omarchy](https://omarchy.org) Quattro shell that checks every
-installed shell plugin for upstream updates, lists them in a panel, and updates them
-one at a time by opening a terminal with the update command pre-typed at the prompt.
+installed shell plugin against the revision the Omarchy plugin marketplace has actually
+reviewed, lists what is behind, and moves a plugin to that reviewed revision from a
+terminal with the command pre-typed at the prompt.
 
 Plugin id: `shaun.plugin-updater`
 
 ## What it does
 
 - Sits in the bar (right section by default) with a small icon and a count badge of
-  plugins that have updates waiting. The icon turns accent-coloured when updates exist.
-- Clicking it opens a panel listing every update first, then plugins whose remote could
-  not be reached, then up-to-date ones, then plugins that are not git checkouts.
-- Each row with an update gets an **Update** button. Pressing it opens a terminal with
-  `omarchy plugin update <plugin-id> --yes` already typed at the prompt. Nothing runs
-  until you press Enter, so you can read the command, edit it, or answer a password
-  prompt in a real terminal, and the window stays open afterwards so any error text is readable.
-- **Update all** queues every pending update, one terminal window each.
+  plugins that are behind their reviewed revision. The icon turns accent-coloured when
+  there is something to do.
+- Clicking it opens a panel: plugins whose reviewed revision is ahead of what is
+  installed come first, then ones that could not be checked, then plugins the marketplace
+  does not list or has not reviewed yet, then everything up to date.
+- Each row with an update gets an **Update** button and shows the reviewed commit it would
+  install. Pressing it opens a terminal with a command already typed that fetches that
+  exact commit, checks it out, proves `HEAD` is that commit, runs Omarchy's own
+  `omarchy plugin validate`, and only then reloads the shell. Nothing runs until you press
+  Enter, so you can read it first, and the window stays open so any error text is readable.
+- **Update all** does the same for every pending row, one terminal each, so a failure in
+  one plugin cannot abort the others.
 - **Check** (or the `r` key) re-checks immediately. Results are otherwise cached, so the
   badge appears instantly after a shell restart instead of waiting on network fetches.
 
-Updates are applied with Omarchy's own `omarchy plugin update` CLI, so its validation
-step and rollback of a bad revision are preserved. That command is `git fetch` plus a
-fast-forward merge inside your own home directory: it runs as you, as a normal user. If a
-system password prompt ever appears, something else is involved, so read the command in
-the terminal before pressing Enter.
+## Why updates are pinned to reviewed revisions
 
-Plugins whose folder has been renamed to `<id>.disabled` are refused by the Omarchy CLI
-(as are hand-cloned directories that are not valid plugin ids), so those rows type a
-plain `git -C <dir> pull --ff-only && omarchy-shell shell rescanPlugins` instead. Both
-command forms are normalised by the launcher script before they are typed, so the
-non-interactive `--yes` form is what always ends up at the prompt.
+An update never installs a branch head. The marketplace catalogue publishes a
+`verificationCommit` for each listed plugin — the commit it has reviewed — and this widget
+only ever offers that commit, showing it on the row. Branch heads move without review, so
+"update to whatever upstream pushed" is precisely the supply-chain hole the marketplace
+flags; pinning to the reviewed commit closes it.
+
+What that means in practice:
+
+- A plugin the catalogue does not list, or lists without a reviewed commit, is shown with
+  the reason and gets no **Update** button.
+- Checking is read-only: it fetches and compares. Nothing is executed until you press
+  Enter in the terminal.
+- If you already have commits the reviewed revision does not contain, the row says
+  "ahead of reviewed revision …" and no update is offered — the widget never moves a
+  plugin backwards.
+- A dirty working tree stops the checkout before anything changes: git refuses rather than
+  discarding your local edits.
+- No password prompt is ever expected or used. Everything here runs as your normal user.
 
 ## Requirements
 
 - Omarchy with the Quattro shell (this is a Quattro plugin).
-- `bash`, `git`, `jq`, and a POSIX `timeout` (all present on a stock Omarchy install).
+- `bash`, `git`, `jq`, `curl` and a POSIX `timeout` (all present on a stock Omarchy install).
 - `xdg-terminal-exec` for the terminal launch; a bare terminal emulator
   (`alacritty`, `foot`, `ghostty`, `kitty`, or `$TERMINAL`) is used as a fallback.
-- Network access to your plugins' git remotes when checking.
+- Network access to `plugins.omarchy.org` (the catalogue) and to your plugins' git remotes.
 
 ## Install
 
@@ -59,6 +73,7 @@ omarchy bar move shaun.plugin-updater --after io.github.dgoran.omastart
 | Action | How |
 | --- | --- |
 | Check for updates | Click the bar icon (or press `r` in the panel for a fresh check) |
+| See what would be installed | The reviewed commit shown on each row |
 | Update one plugin | Its row's **Update** button, then press Enter in the terminal |
 | Update everything | **Update all**, one terminal per plugin |
 | Close the panel | `Escape`, or click the bar icon again |
@@ -75,30 +90,38 @@ uses the shell's `Style` and `Color` tokens rather than hard-coded colours and s
 omarchy bar move shaun.plugin-updater --section right --index 0
 ```
 
-Check results are cached at `${XDG_CACHE_HOME:-~/.cache}/omarchy-plugin-updater.json`.
-Delete that file if a stale count ever bothers you.
+It refreshes the marketplace catalogue at most once every six hours (override with the
+`PLUGIN_UPDATER_CATALOG_TTL` environment variable, in seconds). Everything is cached under
+`${XDG_CACHE_HOME:-~/.cache}`:
+
+- `omarchy-plugin-updater.json` — the last check result (delete it if a stale count
+  ever bothers you)
+- `omarchy-plugin-updater-catalog.json` — the downloaded marketplace catalogue
+- `omarchy-plugin-updater-catalog-map.json` — the small id-to-reviewed-commit index built
+  from it
 
 ## Remove
 
 ```bash
 omarchy plugin remove shaun.plugin-updater
-rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/omarchy-plugin-updater.json"
+rm -f "${XDG_CACHE_HOME:-$HOME/.cache}"/omarchy-plugin-updater{,-catalog,-catalog-map}.json
 ```
 
 If you placed it by hand instead, delete
 `~/.config/omarchy/plugins/shaun.plugin-updater` and remove its entry from
-`~/.config/omarchy/shell.json`. Removal leaves nothing else behind: the widget writes
-only that one cache file, and only ever launches terminals.
+`~/.config/omarchy/shell.json`.
 
 ## Notes on what it touches
 
-- The check script runs `git fetch` against each plugin directory in
-  `~/.config/omarchy/plugins` (read-only on your files, network to the remotes) and
-  writes the one cache file listed above.
-- The widget never runs an update by itself. Every update is a command typed into a
-  terminal that you confirm by pressing Enter.
-- The plugin's own directory is skipped when scanning, so it cannot try to update itself
-  mid-operation.
+- Downloads the public marketplace catalogue from `https://plugins.omarchy.org/catalog.json`
+  and caches the three files listed above. No account, no token, no telemetry.
+- Runs `git fetch` against each plugin directory in `~/.config/omarchy/plugins`. That is
+  read-only on your files; it only adds fetched objects to each plugin's own git database.
+- Never modifies a plugin directory itself. The one thing that changes a checkout is the
+  command you confirm in the terminal, and that command only ever checks out the reviewed
+  commit and refuses if the verification or Omarchy's validation fails.
+- Skips its own directory while scanning, so it cannot try to update itself mid-operation.
+- Removal leaves nothing behind except the three cache files above.
 
 ## License
 

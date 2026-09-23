@@ -276,15 +276,17 @@ Panel {
             foreground: root.barForeground
             accent: Color.accent
             fontFamily: root.fontFamily
-            tooltipText: "Opens a terminal with: omarchy plugin update --yes"
+            tooltipText: "One terminal per plugin, each installing its reviewed revision"
             onClicked: { if (root.hostWidget) root.hostWidget.updateAll(); root.close() }
           }
 
           Text {
             width: parent.width
-            text: "Update buttons open a terminal with the command already typed — "
-              + "press Enter and it updates straight away, no prompts. The window "
-              + "stays open so you can read the result."
+            text: "Update buttons install the revision the marketplace has reviewed "
+              + "for that plugin — the commit shown on the row — and the terminal "
+              + "verifies HEAD needs to match it before reloading the shell. "
+              + "Plugins with no reviewed revision are left alone. Nothing runs "
+              + "until you press Enter, and the window stays open so you can read the result."
             color: root.dimmer
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

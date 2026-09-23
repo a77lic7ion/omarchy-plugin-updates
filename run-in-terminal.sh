@@ -10,22 +10,10 @@
 
 set -o pipefail
 
-# `omarchy plugin update <id>` is interactive by default: it prints the full
-# diff and then waits on a gum confirm prompt, which reads like a hang. Add
-# --yes so it fast-forwards straight away (it still validates the result and
-# rolls back a bad revision). Done here, in the script layer, because bash reads
-# this file fresh on every call — a fix to the QML widget only reaches the bar
-# after the shell reloads it, and this keeps the buttons correct either way.
-normalise() {
-  local cmd="$1"
-  if [[ $cmd =~ ^omarchy[[:space:]]+plugin[[:space:]]+update[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*)[[:space:]]*$ ]]; then
-    printf 'omarchy plugin update %s --yes' "${BASH_REMATCH[1]}"
-    return
-  fi
-  printf '%s' "$cmd"
-}
-
-command_text="$(normalise "$*")"
+# The command is passed through exactly as the widget built it, which always
+# pins a plugin to a marketplace-reviewed commit and verifies it after checkout.
+# There is deliberately nothing here that could turn into a branch-head update.
+command_text="$*"
 [ -n "$command_text" ] || exit 1
 
 # Build a bash single-quoted literal of the command. Our commands never contain
