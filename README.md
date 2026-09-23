@@ -91,8 +91,12 @@ omarchy bar move shaun.plugin-updater --section right --index 0
 ```
 
 It refreshes the marketplace catalogue at most once every six hours (override with the
-`PLUGIN_UPDATER_CATALOG_TTL` environment variable, in seconds). Everything is cached under
-`${XDG_CACHE_HOME:-~/.cache}`:
+`PLUGIN_UPDATER_CATALOG_TTL` environment variable, in seconds). The download is capped at
+32 MiB **while streaming** — `curl --max-filesize` plus a hard byte limit on the pipe — so a
+hostile, corrupted or simply grown endpoint cannot fill your cache directory, and an
+oversized response is deleted rather than parsed (the last good catalogue is kept for that
+case). Override the cap with `PLUGIN_UPDATER_CATALOG_MAX_BYTES` if the catalogue ever
+outgrows it. Everything is cached under `${XDG_CACHE_HOME:-~/.cache}`:
 
 - `omarchy-plugin-updater.json` — the last check result (delete it if a stale count
   ever bothers you)
@@ -114,7 +118,9 @@ If you placed it by hand instead, delete
 ## Notes on what it touches
 
 - Downloads the public marketplace catalogue from `https://plugins.omarchy.org/catalog.json`
-  and caches the three files listed above. No account, no token, no telemetry.
+  and caches the three files listed above. The download is byte-capped while streaming, so an
+  oversized response is cut off and discarded instead of being written or parsed. No account,
+  no token, no telemetry.
 - Runs `git fetch` against each plugin directory in `~/.config/omarchy/plugins`. That is
   read-only on your files; it only adds fetched objects to each plugin's own git database.
 - Never modifies a plugin directory itself. The one thing that changes a checkout is the

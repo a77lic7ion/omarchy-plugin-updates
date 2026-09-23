@@ -21,6 +21,11 @@
 # Read-only: it fetches from remotes (and from the catalogue) to compare. It
 # never merges, pulls, checks out, hard-resets or writes inside a plugin
 # directory.
+#
+# The catalogue download is byte-capped while streaming (CATALOG_MAX_BYTES, 32 MiB
+# by default) and is deleted rather than parsed when it exceeds the cap, so a
+# compromised or oversized endpoint cannot fill the cache filesystem or drive
+# unbounded parser memory.
 
 set -o pipefail
 
@@ -30,7 +35,8 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
 CATALOG_CACHE="$CACHE_DIR/omarchy-plugin-updater-catalog.json"
 CATALOG_MAP="$CACHE_DIR/omarchy-plugin-updater-catalog-map.json"
 ROWS_CACHE="$CACHE_DIR/omarchy-plugin-updater.json"
-CATALOG_TTL="${PLUGIN_UPDATER_CATALOG_TTL:-21600}" # 6 hours
+CATALOG_TTL="${PLUGIN_UPDATER_CATALOG_TTL:-21600}"             # 6 hours
+CATALOG_MAX_BYTES="${PLUGIN_UPDATER_CATALOG_MAX_BYTES:-33554432}" # 32 MiB streaming cap
 
 export GIT_TERMINAL_PROMPT=0
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -oBatchMode=yes}"
@@ -45,22 +51,48 @@ trap 'rm -rf "$tmp"' EXIT
 
 catalog_is_usable() { jq -e '.plugins' "$1" >/dev/null 2>&1; }
 
+# A catalogue we are willing to read: present, within the byte cap, parseable. The
+# size is checked before jq ever sees the file — an oversized one is deleted, not
+# parsed, so neither the parser nor the cache filesystem can be driven by it.
+catalog_cache_ok() {
+  [ -f "$1" ] || return 1
+  if [ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt "$CATALOG_MAX_BYTES" ]; then
+    rm -f "$1"
+    return 1
+  fi
+  catalog_is_usable "$1"
+}
+
 refresh_catalog() {
-  local now mtime age
+  local now mtime age size
   now="$(date +%s)"
   mtime="$(stat -c %Y "$CATALOG_CACHE" 2>/dev/null || echo 0)"
   age=$((now - mtime))
-  if [ -f "$CATALOG_CACHE" ] && [ "$age" -lt "$CATALOG_TTL" ] && catalog_is_usable "$CATALOG_CACHE"; then
+  if [ "$age" -lt "$CATALOG_TTL" ] && catalog_cache_ok "$CATALOG_CACHE"; then
     return 0
   fi
   local tmpcat="$CATALOG_CACHE.tmp"
-  if timeout 90 curl -fsSL --compressed -o "$tmpcat" "$CATALOG_URL" 2>/dev/null && catalog_is_usable "$tmpcat"; then
+  rm -f "$tmpcat"
+  # The cap is enforced while streaming, not after the fact. curl refuses a
+  # response whose declared length is over the cap, and `head -c` stops the pipe
+  # after cap+1 bytes, so a compressed, chunked or dishonest response cannot
+  # stream unbounded bytes onto the cache filesystem — curl dies on the closed
+  # pipe and `set -o pipefail` reports that as a failure. Whatever does arrive is
+  # measured again and deleted if it is over the cap, before jq is allowed to
+  # read it.
+  if timeout 90 curl -fsSL --compressed --max-filesize "$CATALOG_MAX_BYTES" \
+    "$CATALOG_URL" 2>/dev/null |
+    head -c "$((CATALOG_MAX_BYTES + 1))" >"$tmpcat" &&
+    size="$(wc -c <"$tmpcat" 2>/dev/null || echo 0)" &&
+    [ "$size" -le "$CATALOG_MAX_BYTES" ] &&
+    catalog_is_usable "$tmpcat"; then
     mv "$tmpcat" "$CATALOG_CACHE"
     return 0
   fi
   rm -f "$tmpcat"
-  # Fall back to a stale copy rather than reporting nothing.
-  [ -f "$CATALOG_CACHE" ] && catalog_is_usable "$CATALOG_CACHE"
+  # Fall back to a stale copy rather than reporting nothing — bounded like any
+  # other catalogue this script is willing to read.
+  catalog_cache_ok "$CATALOG_CACHE"
 }
 
 build_map() {
