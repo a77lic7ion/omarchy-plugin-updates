@@ -11,6 +11,7 @@ BarWidget {
   id: root
   moduleName: "shaun.plugin-updater"
 
+  property bool freshCatalog: false
   readonly property string checkScript: String(Qt.resolvedUrl("check-updates.sh")).replace("file://", "")
   readonly property string runScript: String(Qt.resolvedUrl("run-in-terminal.sh")).replace("file://", "")
   readonly property string cacheDir: {
@@ -55,13 +56,18 @@ BarWidget {
 
   // -- update checking ------------------------------------------------------
 
-  function refresh(force) {
+  // freshCatalog: re-download the marketplace catalogue instead of reusing the
+  // cached copy (kept for hours). A user pressing Check expects a plugin listed
+  // minutes ago to show up, so the explicit paths pass true; the timer and
+  // panel open keep the cache.
+  function refresh(force, freshCatalog) {
     if (checkProc.running) return
     // The panel calls this on every open; a check from the last two minutes is
     // fresh enough to reuse and keeps opens instant.
     if (!force && root.lastChecked > 0 && (Date.now() - root.lastChecked) < 120000) return
     root.checkError = ""
     root.checking = true
+    root.freshCatalog = !!freshCatalog
     checkProc.running = true
   }
 
@@ -171,6 +177,7 @@ BarWidget {
   Process {
     id: checkProc
     command: ["bash", root.checkScript]
+    environment: root.freshCatalog ? ({ PLUGIN_UPDATER_CATALOG_TTL: "0" }) : ({})
     running: true
     stdout: StdioCollector {
       waitForEnd: true

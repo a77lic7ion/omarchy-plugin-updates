@@ -98,7 +98,7 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function (direction) { root.switchPanel(direction) }
       onTextKey: function (t) {
-        if (t === "r" || t === "R") { if (root.hostWidget) root.hostWidget.refresh(true) }
+        if (t === "r" || t === "R") { if (root.hostWidget) root.hostWidget.refresh(true, true) }
       }
 
       Column {
@@ -144,7 +144,7 @@ Panel {
             accent: Color.accent
             fontFamily: root.fontFamily
             tooltipText: "Re-check every plugin (r)"
-            onClicked: { if (root.hostWidget) root.hostWidget.refresh(true) }
+            onClicked: { if (root.hostWidget) root.hostWidget.refresh(true, true) }
           }
         }
 
